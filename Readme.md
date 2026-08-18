@@ -4,7 +4,7 @@
 
 # Malware Analysis Report — NoEscape.exe
 
-## 1. Executive Summary
+## 1. Summary
 
 This report documents the static analysis of `NoEscape.exe`, a Windows executable associated with the **NoEscape** malware/sample by Endermach.
 
@@ -47,6 +47,7 @@ The SHA-256 hash should be used to uniquely identify this exact specimen during 
 ```text
 d30d7676a3b4c91b77d403f81748ebf6b8824749db5f860e114a8a204bca5b8f
 ```
+![alt text](image-1.png)
 
 ---
 
@@ -71,6 +72,8 @@ The executable therefore needs to be analyzed with the appropriate 32-bit Window
 * Windows API calls
 * Disassembly
 * PE structures
+
+![alt text](image-2.png)
 
 ---
 
@@ -112,6 +115,8 @@ It may contain resources such as:
 * Other Windows resources
 
 The resource section should therefore be inspected independently because resources can sometimes provide useful information even when the executable's main code is packed.
+
+![alt text](image-3.png)
 
 ---
 
@@ -230,573 +235,564 @@ Because the actual code is packed, analysis of:
 
 may not reveal the full functionality of the original executable.
 
+
+
 ---
 
-# 9. Dynamic Analysis
+# Dynamic Analysis of NoEscape.exe
 
-## 9.1 Objective
+## What Are We Trying to Find?
 
-Dynamic analysis was performed using publicly available sandbox executions of the exact `NoEscape.exe` specimen identified during static analysis.
+Static analysis tells us what a malware file **contains**.
 
-The specimen was identified by the following SHA-256:
+Dynamic analysis tells us what the malware **actually does when it runs**.
+
+For example:
+
+```text
+Static Analysis:
+"What is inside NoEscape.exe?"
+
+Dynamic Analysis:
+"What happens when we execute NoEscape.exe?"
+```
+
+Because NoEscape is packed with MPRESS, dynamic analysis is especially useful.
+
+---
+
+# 1. How Was the Malware Tested?
+
+We did not execute the malware on a normal personal computer.
+
+Instead, we used publicly available malware-analysis sandboxes that had already executed the **same exact file**.
+
+The sample was identified using its SHA-256 hash:
 
 ```text
 D30D7676A3B4C91B77D403F81748EBF6B8824749DB5F860E114A8A204BCA5B8F
 ```
 
-Because the original analysis environment did not include a dedicated Windows malware-analysis VM, public sandbox executions of the same hash were used as behavioral evidence.
+The two main sources used were:
 
-The primary sandbox used for behavioral analysis was ANY.RUN. A separate Hybrid Analysis/Falcon Sandbox execution was also examined for corroborating evidence.
+* ANY.RUN
+* Hybrid Analysis / Falcon Sandbox
 
----
-
-# 9.2 ANY.RUN Analysis
-
-ANY.RUN is an interactive malware sandbox that executes samples inside an isolated Windows environment while monitoring system behavior.
-
-The exact SHA-256 was executed in a Windows 10 Professional 64-bit environment.
-
-One documented execution used:
-
-```text
-Operating System: Windows 10 Professional
-Build: 19044
-Architecture: 64-bit
-
-Sample:
-NoEscape.exe
-
-Sample architecture:
-PE32 / Intel 80386
-
-Task duration:
-300 seconds
-
-Additional time:
-240 seconds
-
-Network:
-Enabled
-
-MITM proxy:
-Disabled
-
-FakeNet:
-Disabled
-
-Tor:
-Disabled
-
-Heavy Evasion:
-Disabled
-
-UAC auto-confirmation:
-Enabled
-```
-
-The sandbox exposes runtime information including:
-
-* Process activity
-* Registry activity
-* File activity
-* Debug/system events
-* Network activity
-* Screenshots
-* Behavioral signatures
-* MITRE ATT&CK mappings
+These services run suspicious files inside isolated Windows environments and watch what happens.
 
 ---
 
-# 9.3 Processes Observed
+# 2. What Is a Malware Sandbox?
 
-The sandbox observed the primary malicious process:
+Imagine a laboratory room.
 
-```text
-NoEscape.exe
-```
+A scientist can put a dangerous substance inside the room, perform an experiment, and observe what happens without exposing the rest of the building.
 
-and additional executions of:
+A malware sandbox works in a similar way:
 
 ```text
-winnt32.exe
+Suspicious file
+      ↓
+Isolated Windows environment
+      ↓
+Run the file
+      ↓
+Watch what it does
+      ↓
+Generate a report
 ```
 
-The presence of `winnt32.exe` is significant because other behavioral evidence connects this executable to persistence through the Windows Winlogon configuration.
+The sandbox can monitor things such as:
 
-The observed process chain can be summarized as:
+* Programs that start
+* Files that are created or modified
+* Registry changes
+* Network connections
+* System settings
+* Other suspicious activity
 
-```text
-NoEscape.exe
-     |
-     +----> creates/modifies executable content
-     |
-     +----> modifies registry
-     |
-     +----> modifies Windows security settings
-     |
-     v
-winnt32.exe
-```
+For our investigation, ANY.RUN and Hybrid Analysis provided this type of evidence.
 
 ---
 
-# 9.4 Registry Activity
+# 3. What Happened When NoEscape Ran?
 
-One of the most significant dynamic findings was modification of Windows registry configuration.
+The most important finding is that NoEscape does not simply run and exit.
 
-The sandbox detected:
+It begins changing the Windows environment.
+
+The sandbox observed activity involving:
 
 ```text
-Changes the login/logoff helper path in the registry
+NoEscape.exe
+      |
+      ├── Registry changes
+      |
+      ├── Windows security changes
+      |
+      ├── File changes
+      |
+      └── winnt32.exe
 ```
 
-This behavior is associated with the Windows Winlogon mechanism.
+These changes are important because they can allow the malware to remain active and interfere with the normal operation of Windows.
 
-The observed persistence configuration is:
+---
+
+# 4. NoEscape Creates/Uses winnt32.exe
+
+One of the most important observations was:
+
+```text
+C:\Windows\winnt32.exe
+```
+
+The malware creates/uses this executable as part of its behavior.
+
+The interesting part is what happens next.
+
+NoEscape modifies a Windows login-related setting so that `winnt32.exe` can be executed when a user logs into Windows.
+
+---
+
+# 5. Persistence Through Winlogon
+
+## What does persistence mean?
+
+Persistence simply means:
+
+> "How does malware make sure it can come back after the computer restarts?"
+
+For example:
+
+```text
+Malware runs
+     ↓
+Creates persistence
+     ↓
+Computer restarts
+     ↓
+User logs in
+     ↓
+Malware runs again
+```
+
+NoEscape uses a Windows login mechanism for this.
+
+The sandbox observed a modification to:
 
 ```text
 HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon
+```
 
-Userinit =
+Specifically, the `Userinit` configuration was modified to include:
+
+```text
 C:\Windows\system32\userinit.exe,
 C:\Windows\winnt32.exe
 ```
 
-This causes `winnt32.exe` to be executed as part of the Windows logon initialization process.
+In simple terms:
 
-The behavior therefore represents a persistence mechanism:
+> NoEscape tells Windows to also run `winnt32.exe` when the user logs in.
 
-```text
-NoEscape.exe
-      |
-      v
-Creates/uses winnt32.exe
-      |
-      v
-Modifies Winlogon\Userinit
-      |
-      v
-User logs into Windows
-      |
-      v
-winnt32.exe executes
-```
+This is one of the strongest findings in the dynamic analysis.
 
 ---
 
-# 9.5 UAC/LUA Modification
+# 6. NoEscape Modifies UAC
 
-ANY.RUN detected:
+## What is UAC?
+
+UAC stands for **User Account Control**.
+
+It is the security feature that can show a Windows permission prompt when a program wants to perform an important action.
+
+A simplified example:
 
 ```text
-UAC/LUA settings modification
+Program wants to change system settings
+              ↓
+        Windows checks
+              ↓
+          UAC prompt
+              ↓
+       User approves
 ```
 
-The relevant configuration is associated with:
+The sandbox observed NoEscape modifying the Windows UAC/LUA configuration.
 
-```text
-HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
-```
-
-including modification of the `EnableLUA` setting.
-
-The purpose of this modification is to weaken Windows User Account Control.
-
-This is important because the malware is not only attempting to execute persistently but is also modifying a Windows security mechanism.
+This is significant because malware is modifying a security mechanism that normally helps protect the system.
 
 ---
 
-# 9.6 Shutdown Modification
+# 7. NoEscape Disables Registry Tools
 
-The sandbox detected:
+The sandbox also observed a modification associated with:
 
 ```text
-Disables the Shutdown in the Start menu
+HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
 ```
 
-This behavior interferes with normal system shutdown controls.
+including:
 
-It is consistent with the broader behavior of NoEscape modifying the Windows environment rather than simply performing conventional information theft.
+```text
+DisableRegistryTools = 1
+```
+
+The effect is to disable normal access to Windows Registry Editor.
+
+Why would malware do this?
+
+Because the Registry is where some of its own modifications exist.
+
+Conceptually:
+
+```text
+NoEscape
+   ↓
+Changes Registry
+   ↓
+Disables Registry Editor
+   ↓
+Makes manual cleanup more difficult
+```
+
+This is an example of malware interfering with the tools a user might use to fix the system.
 
 ---
 
-# 9.7 Executable File Modification
+# 8. NoEscape Changes Windows Behavior
 
-ANY.RUN detected:
+The sandbox observed several other system modifications.
+
+### Shutdown
+
+NoEscape disables the normal Shutdown option in the Start menu.
+
+### Mouse
+
+It modifies:
 
 ```text
-Executable content was dropped or overwritten
+SwapMouseButtons
 ```
 
-and the execution of:
+which can swap the primary and secondary mouse buttons.
+
+### Keyboard
+
+It modifies the Windows keyboard:
 
 ```text
-winnt32.exe
+Scancode Map
 ```
 
-was observed.
+which can change how keyboard keys are interpreted.
 
-The dropped executable is significant because it is subsequently associated with the Winlogon persistence mechanism.
+These behaviors demonstrate that NoEscape is not simply trying to hide itself.
+
+It actively changes the user's Windows environment.
 
 ---
 
-# 9.8 System Discovery
+# 9. System Information Gathering
 
-The sandbox recorded several system-discovery behaviors.
+Before or during its execution, NoEscape also checks information about the computer.
 
-NoEscape was observed:
+Observed activity includes checking:
+
+* Computer name
+* Supported languages
+* Location/environment settings
+* Windows security-related settings
+
+Why might malware do this?
+
+A program can use information about its environment to decide what to do next.
+
+For example:
 
 ```text
-Reading the computer name
-Checking supported languages
-Checking computer location settings
-Reading Internet Explorer security settings
+Start
+ ↓
+Check computer
+ ↓
+Check environment
+ ↓
+Decide what behavior to perform
 ```
 
-These observations indicate that the program gathers information about the environment in which it is executing.
-
-The language and location checks may also be useful to malware for environment identification or conditional behavior.
+We should not automatically assume that every piece of information collected is being sent to an attacker.
 
 ---
 
-# 9.9 Hybrid Analysis / Falcon Sandbox
+# 10. What Did the Second Sandbox Find?
 
-A separate execution of the exact same SHA-256 was analyzed by Hybrid Analysis, powered by Falcon Sandbox.
+The exact same SHA-256 was also analyzed using Hybrid Analysis / Falcon Sandbox.
 
-Environment:
+This gave us an additional piece of evidence.
 
-```text
-Operating System: Windows 10 64-bit Professional
-Build: 16299
-```
+The sandbox captured the running process in memory.
 
-The process analyzed was:
-
-```text
-NoEscape.exe
-PID: 4200
-```
-
-Falcon Sandbox generated a process-memory dump of approximately:
-
-```text
-1.8 MiB
-```
-
-This memory dump was subsequently analyzed for:
-
-* API references
-* Loaded modules
-* Strings
-* Runtime artifacts
-* Behavioral indicators
-
----
-
-# 9.10 Runtime API Evidence
-
-The memory analysis identified references to APIs including:
+The memory analysis found references to Windows APIs such as:
 
 ```text
 ShellExecuteW
 ShowWindow
 GetModuleHandleA
-FreeSid
-CoTaskMemFree
-BCryptGenRandom
 GetDC
-GetDCEx
 GetWindowDC
-CreateDCA
-CreateDCW
 CreateCompatibleBitmap
+BitBlt
 CreateCompatibleDC
-BitBlt
+BCryptGenRandom
 ```
 
-These API references provide additional evidence about functionality present in the executing process.
+These are Windows functions that programs can use for things such as:
 
-In particular, the presence of graphical APIs such as:
+* Launching programs
+* Controlling windows
+* Working with graphical data
+* Generating random data
+* Accessing Windows functionality
 
-```text
-GetDC
-GetWindowDC
-CreateCompatibleBitmap
-BitBlt
-```
+Important:
 
-is consistent with functionality capable of interacting with or capturing graphical content.
+> Finding an API does not automatically prove that the malware performed the corresponding action.
 
-However, API presence alone should not be interpreted as proof that a particular action occurred during the execution.
+It simply tells us that the functionality is present or available to the program.
 
 ---
 
-# 9.11 Loaded Modules
+# 11. What About Network Activity?
 
-The memory analysis also identified Windows modules loaded by the process, including:
+This is an important negative finding.
 
-```text
-KERNEL32.DLL
-OLE32.DLL
-OLEAUT32.DLL
-RPCRT4.DLL
-SSPICLI.DLL
-UXTHEME.DLL
-MSCTF.DLL
-BCRYPTPRIMITIVES.DLL
-```
+The available Falcon Sandbox execution did **not** establish meaningful command-and-control communication from NoEscape.
 
-and other Windows API-set modules.
-
-This provides runtime evidence of the libraries actually available to the process.
-
----
-
-# 9.12 Network Activity
-
-The Hybrid Analysis execution reported:
+In other words:
 
 ```text
-Relevant DNS requests: None
-Relevant contacted hosts: None
-Relevant HTTP requests: None
+No strong evidence of:
+
+NoEscape → Attacker server
 ```
 
-Therefore, meaningful command-and-control communication was not established from this execution.
+was found in that execution.
 
-Other sandbox executions contained normal Windows certificate/revocation traffic. Such traffic should not automatically be classified as malware C2.
-
-The available evidence therefore does not support describing NoEscape as a network-dependent C2 malware sample.
-
----
-
-# 9.13 Memory Analysis and MPRESS
-
-Static analysis identified:
-
-```text
-.MPRESS1
-.MPRESS2
-```
-
-which strongly indicated MPRESS packing.
-
-The Hybrid Analysis execution subsequently captured the process in memory and identified runtime APIs, modules, and strings.
-
-This produces an important static/dynamic correlation:
-
-```text
-                STATIC ANALYSIS
-                       |
-                       v
-             .MPRESS1 / .MPRESS2
-                       |
-                       v
-                MPRESS packing
-                       |
-                       v
-          Original functionality obscured
-                       |
-                       v
-                DYNAMIC EXECUTION
-                       |
-                       v
-              Process memory dump
-                       |
-                       v
-           Runtime APIs / modules / strings
-                       |
-                       v
-           Additional functionality exposed
-```
-
-This demonstrates why packed executables should not be analyzed exclusively from their on-disk representation.
-
----
-
-# 9.14 Static vs Dynamic Correlation
-
-| Static Observation            | Dynamic Observation                                                       | Assessment      |
-| ----------------------------- | ------------------------------------------------------------------------- | --------------- |
-| PE32 executable               | Executed as a 32-bit Windows process                                      | Consistent      |
-| Intel 386 architecture        | Executed successfully under 64-bit Windows through WOW64                  | Consistent      |
-| `.MPRESS1` section            | Runtime process generated memory artifacts                                | Consistent      |
-| `.MPRESS2` section            | Runtime APIs/modules became observable                                    | Consistent      |
-| Packed executable             | Sandbox behavior exposed functionality not obvious from static inspection | Consistent      |
-| Potential persistence         | Winlogon helper path modified                                             | Confirmed       |
-| Potential system modification | UAC/LUA settings modified                                                 | Confirmed       |
-| Potential system interference | Shutdown option disabled                                                  | Confirmed       |
-| Potential payload deployment  | Executable content dropped/overwritten                                    | Confirmed       |
-| Runtime secondary executable  | `winnt32.exe` observed                                                    | Confirmed       |
-| Environment awareness         | Computer name/language/location queried                                   | Confirmed       |
-| Network capability            | No relevant network traffic in Falcon Sandbox                             | Not established |
-
----
-
-# 9.15 Evidence Classification
-
-The findings should be divided into three categories.
-
-## Confirmed by dynamic execution
-
-```text
-Winlogon helper modification
-UAC/LUA modification
-Shutdown-menu modification
-Executable content dropped/overwritten
-winnt32.exe execution
-Computer-name discovery
-Language discovery
-Location/environment checks
-```
-
-## Corroborated by runtime memory analysis
-
-```text
-ShellExecuteW
-ShowWindow
-GetModuleHandleA
-Graphical/GDI APIs
-Windows DLL/module loading
-Runtime strings
-```
-
-## Not established from the available evidence
-
-```text
-Definitive C2 communication
-Definitive exfiltration
-Definitive credential theft by NoEscape itself
-```
-
-A sandbox detection involving another process should not automatically be attributed to NoEscape.
-
----
-
-# 9.16 Overall Behavioral Assessment
-
-The dynamic evidence is strongly consistent with the static analysis.
-
-Static analysis initially showed a small number of unusual sections:
-
-```text
-.MPRESS1
-.MPRESS2
-```
-
-indicating that the executable was packed.
-
-Dynamic analysis demonstrated that once the executable was running, it performed significant Windows system modifications.
-
-The most important behavioral chain is:
-
-```text
-                NoEscape.exe
-                     |
-       +-------------+-------------+
-       |             |             |
-       v             v             v
-    Registry       Files        System
-    changes       changes     modifications
-       |             |             |
-       v             v             v
-   Winlogon      winnt32.exe    UAC/LUA
-   persistence                  Shutdown
-       |                         settings
-       +-------------+-----------+
-                     |
-                     v
-              Persistent system
-                 modification
-```
-
-The static and dynamic evidence therefore reinforce one another.
-
-The static analysis explains **why the executable was difficult to inspect**, while the dynamic analysis demonstrates **what the running program actually does**.
-
----
-
-# 9.17 Limitations
-
-The analysis was performed using public sandbox executions rather than a personally controlled malware-analysis VM.
+Some sandbox traffic can come from normal Windows components, so simply seeing network traffic does not mean that malware C2 occurred.
 
 Therefore:
 
-1. The exact sandbox configuration cannot be assumed to represent every possible execution environment.
-2. Sandbox signatures can sometimes attribute activity to the wrong process.
-3. API presence does not necessarily prove that the corresponding functionality was exercised.
-4. Behavior observed in one sandbox run may not occur in another run.
-5. Network traffic generated by the operating system should not automatically be classified as malware C2.
-6. Findings from other NoEscape variants should not be presented as observations of this exact SHA-256 without separate evidence.
-
-The highest-confidence findings are those directly attributed to `NoEscape.exe` in multiple sandbox executions.
+> Network-based command-and-control was not established from the available evidence.
 
 ---
 
-# 9.18 Conclusion
+# 12. How Does This Connect to Our Static Analysis?
 
-Dynamic analysis substantially strengthened the conclusions obtained from static analysis.
+This is where the two parts of the investigation come together.
 
-The sample was confirmed to execute as a PE32 Windows executable and was repeatedly identified by public sandbox environments as malicious.
-
-The most significant observed behaviors were:
-
-* Winlogon persistence
-* UAC/LUA modification
-* Shutdown-control modification
-* Executable file modification
-* Creation/execution of `winnt32.exe`
-* System/environment discovery
-
-The separate Falcon Sandbox memory analysis also demonstrated that useful runtime APIs, modules, and strings could be recovered from the executing process.
-
-This is particularly relevant to the original MPRESS finding:
+Our static analysis found:
 
 ```text
-Packed executable on disk
-          ↓
-Limited static visibility
-          ↓
-Runtime execution
-          ↓
-Memory acquisition
-          ↓
-Runtime artifacts
-          ↓
-Behavioral analysis
+PE32
+   ↓
+.MPRESS1
+.MPRESS2
+   ↓
+MPRESS-packed executable
 ```
 
-Therefore, the investigation demonstrates the complementary nature of static and dynamic malware analysis.
+Packing makes it harder to understand the original program by simply looking at the file.
 
----
-
-# 9.19 Primary Sources
-
-* ANY.RUN — exact SHA-256 behavioral analysis:
-  `https://any.run/report/d30d7676a3b4c91b77d403f81748ebf6b8824749db5f860e114a8a204bca5b8f/c91333a0-fd55-4c00-b1f0-48e02f9c20cb`
-
-* ANY.RUN — additional exact-hash execution:
-  `https://any.run/report/d30d7676a3b4c91b77d403f81748ebf6b8824749db5f860e114a8a204bca5b8f/d0b4f9f0-a629-4838-ac4b-8822b57cb672`
-
-* Hybrid Analysis / Falcon Sandbox — exact SHA-256:
-  `https://hybrid-analysis.com/sample/d30d7676a3b4c91b77d403f81748ebf6b8824749db5f860e114a8a204bca5b8f/65c4e3528263c2163f0c8480`
-
----
-
-# 9.20 Key Takeaway
-
-> **Static analysis told us that NoEscape was packed. Dynamic analysis showed us what the packed program actually did once executed.**
-
-The strongest correlation is therefore:
+Then dynamic analysis showed:
 
 ```text
-STATIC:
-PE32 + .MPRESS1 + .MPRESS2
-              ↓
-        Packed executable
-              ↓
-DYNAMIC:
-Registry + filesystem + process + system modifications
-              ↓
-     Observable malicious behavior
+Run NoEscape
+      ↓
+Observe runtime behavior
+      ↓
+Registry changes
+      ↓
+File changes
+      ↓
+Winlogon modification
+      ↓
+UAC modification
+      ↓
+winnt32.exe
 ```
+
+So the two analyses complement each other.
+
+---
+
+# 13. Static vs Dynamic
+
+| Static Analysis                      | Dynamic Analysis                           |
+| ------------------------------------ | ------------------------------------------ |
+| Looks at the file without running it | Runs the file in a controlled environment  |
+| Found PE32/x86                       | Confirmed it executes as a Windows process |
+| Found `.MPRESS1`                     | Runtime behavior became observable         |
+| Found `.MPRESS2`                     | Process memory could be inspected          |
+| Examines strings/imports/code        | Watches actual system changes              |
+| Tells us what may be inside          | Tells us what the program actually does    |
+
+A simple way to remember it:
+
+```text
+STATIC
+"What is this file?"
+
+        +
+
+DYNAMIC
+"What does this file do?"
+
+        =
+
+Better malware analysis
+```
+
+---
+
+# 14. Most Important Findings
+
+The strongest dynamic findings for NoEscape are:
+
+### 1. Persistence
+
+NoEscape modifies the Winlogon `Userinit` configuration.
+
+```text
+Winlogon
+   ↓
+Userinit
+   ↓
+winnt32.exe
+```
+
+### 2. Security modification
+
+It modifies UAC/LUA-related settings.
+
+### 3. System interference
+
+It changes Windows behavior, including:
+
+* Shutdown controls
+* Mouse configuration
+* Keyboard configuration
+
+### 4. File modification
+
+It creates/uses:
+
+```text
+C:\Windows\winnt32.exe
+```
+
+### 5. Environment discovery
+
+It checks information about the computer and its configuration.
+
+### 6. Runtime evidence
+
+A separate sandbox captured process memory containing Windows API references and runtime artifacts.
+
+---
+
+# 15. What We Can Confidently Say
+
+Based on the available sandbox evidence:
+
+> NoEscape is a malicious Windows executable that modifies the Windows environment, establishes persistence through a login-related mechanism, changes security-related settings, and creates/uses an additional executable named `winnt32.exe`.
+
+The behavior is consistent with our static analysis because the executable was identified as an MPRESS-packed PE32 binary, meaning that important functionality may not be obvious from the original file alone.
+
+---
+
+# 16. What We Should NOT Claim
+
+Malware analysis requires distinguishing evidence from assumptions.
+
+We should **not** claim that:
+
+* Every API found in memory was necessarily executed.
+* Every network connection in the sandbox was C2.
+* NoEscape definitely stole passwords based only on a generic sandbox detection.
+* Every behavior from another NoEscape variant occurred in this exact sample.
+* Packing automatically means the file is malicious.
+
+The strongest conclusions are the behaviors directly observed and attributed to the exact SHA-256.
+
+---
+
+# 17. Final Analysis Chain
+
+The complete investigation can be summarized as:
+
+```text
+                 NoEscape.exe
+                       |
+                       v
+                STATIC ANALYSIS
+                       |
+                       v
+             PE32 / x86 executable
+                       |
+                       v
+                .MPRESS1 / .MPRESS2
+                       |
+                       v
+                  MPRESS packed
+                       |
+                       v
+              DYNAMIC ANALYSIS
+                       |
+                       v
+               Execute in sandbox
+                       |
+          +------------+------------+
+          |            |            |
+          v            v            v
+      Registry       Files       Processes
+       changes      changes       changes
+          |            |            |
+          v            v            v
+      Winlogon     winnt32.exe   Runtime
+      persistence                behavior
+          |
+          v
+       UAC/system
+       modification
+          |
+          v
+       Final behavioral
+         assessment
+```
+
+---
+
+# 18. Key Takeaway
+
+The most important lesson from NoEscape is:
+
+> **A malware analyst should not rely on a single type of analysis.**
+
+Static analysis helped us understand the structure of the file and identify MPRESS packing.
+
+Dynamic analysis then showed what happened when the program actually ran.
+
+Together:
+
+```text
+Static analysis
+      +
+Dynamic analysis
+      ↓
+Much clearer understanding of the malware
+```
+
+That is the fundamental workflow we used to investigate NoEscape.exe.
