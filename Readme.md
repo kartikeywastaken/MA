@@ -47,7 +47,7 @@ The SHA-256 hash should be used to uniquely identify this exact specimen during 
 ```text
 d30d7676a3b4c91b77d403f81748ebf6b8824749db5f860e114a8a204bca5b8f
 ```
-![alt text](image-1.png)
+![alt text](image-4.png)
 
 ---
 
